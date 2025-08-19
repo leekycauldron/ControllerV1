@@ -13,16 +13,24 @@ class MusicPlayer:
         try:
             data = execute("playerctl metadata --format '{{title}}|{{artist}}|{{mpris:length}}|{{mpris:artUrl}}'").stdout.split('|')
             data.insert(2, execute("playerctl position").stdout[:-1])
+            if data[0] == '':
+                return ['','',0,0,'']
             if data[1] == 'DJ X':
                 return ['Up Next', 'DJ X', 0,0,'']
             # Clean Data
             data[-1] = data[-1][:-1]#  Remove trailing \n and ' in album cover
             #data[0] = data[0][1:] # Remove starting ' in title
-            data[2] = int(float(data[2])) # Convert position to int (seconds)
+            if data[2] != "":
+                data[2] = int(float(data[2])) # Convert position to int (seconds)
+            else:
+                data[2] = 0
             data[3] = int(data[3][:-6]) # Convert track length to int (seconds)
             return data
-        except:
-            print(data)
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            print("Error:",e)
+            print("Data:",data)
     
 
 if __name__ == "__main__":

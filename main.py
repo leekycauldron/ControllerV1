@@ -3,8 +3,14 @@ from multiprocessing import Process
 from StreamDeck.DeviceManager import DeviceManager
 from decklayer import DeckLayer
 from utils import execute
+from light_controller import *
 import time
 import subprocess
+
+# TODO: Get Phillips Hue Connected (May have to look into dual-network)
+# TODO: Finish Stream Deck Grid
+# TODO: Add Volume Display on M5 Core 2.
+# TODO: Ignore non spotify media
 
 def m5_process():
     mp = MusicPlayer()
@@ -37,20 +43,20 @@ def sd_process():
         [{"text": "Previous Song", "callback": lambda: execute("playerctl previous"), "image": "assets/previous_song.jpg"},
         {"text": "Play/Pause", "callback": lambda: play_or_pause(), "image": lambda: play_or_pause(True)},
         {"text": "Next Song", "callback": lambda: execute("playerctl next"), "image": "assets/next_song.jpg"},
-        {"text": "OFF", "callback": lambda: test(), "image": ""},
-        {"text": "ALL WHITE", "callback": lambda: test(), "image": ""}],
+        {"text": "OFF", "callback": lambda: lights_off(), "image": "assets/lights_off.jpg"},
+        {"text": "Day", "callback": lambda: set_scene("Day"), "image": "assets/day_lights.jpg"}],
 
         [{"text": "Rewind 10s", "callback": lambda: execute("playerctl position 10-"), "image": "assets/rewind.jpg"},
         {"text": "Loop", "callback": lambda: loop_mode(), "image": lambda: loop_mode(True)},
         {"text": "Fast Forward 10s", "callback": lambda: execute("playerctl position 10+"), "image": "assets/fast_forward.jpg"},
-        {"text": "Night", "callback": lambda: test(), "image": ""},
-        {"text": "Read", "callback": lambda: test(), "image": ""}],
+        {"text": "Night", "callback": lambda: set_scene("Night"), "image": "assets/night_lights.jpg"},
+        {"text": "Read", "callback": lambda: set_scene("Reading"), "image": "assets/read.jpg"}],
 
         [{"text": "Mute", "callback": lambda: volume("amixer set Master 0%"), "image": "assets/mute.jpg"},
         {"text": "Volume Down", "callback": lambda: volume("amixer set Master 6%-"), "image": "assets/volume_down.jpg"},
         {"text": "Volume Up", "callback": lambda: volume("amixer set Master 6%+"), "image": "assets/volume_up.jpg"},
-        {"text": "Wake Up", "callback": lambda: test(), "image": ""},
-        {"text": "Sleep", "callback": lambda: test(), "image": ""}]
+        {"text": "Wake Up", "callback": lambda: test(), "image": "assets/wake_up.jpg"},
+        {"text": "Sleep", "callback": lambda: test(), "image": "assets/sleep.jpg"}]
     ])
     ui.set_page(0)
 
