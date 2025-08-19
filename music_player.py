@@ -10,27 +10,25 @@ class MusicPlayer:
 
     # Title, Artist, Position, Track Length, Album Cover
     def get_metadata(self):
-        try:
-            data = execute("playerctl metadata --format '{{title}}|{{artist}}|{{mpris:length}}|{{mpris:artUrl}}'").stdout.split('|')
-            data.insert(2, execute("playerctl position").stdout[:-1])
-            if data[0] == '':
-                return ['','',0,0,'']
-            if data[1] == 'DJ X':
-                return ['Up Next', 'DJ X', 0,0,'']
-            # Clean Data
-            data[-1] = data[-1][:-1]#  Remove trailing \n and ' in album cover
-            #data[0] = data[0][1:] # Remove starting ' in title
-            if data[2] != "":
-                data[2] = int(float(data[2])) # Convert position to int (seconds)
-            else:
-                data[2] = 0
-            data[3] = int(data[3][:-6]) # Convert track length to int (seconds)
-            return data
-        except KeyboardInterrupt:
-            return
-        except Exception as e:
-            print("Error:",e)
-            print("Data:",data)
+        data = []
+        tags = {
+            "title": '', "artist": '', "mpris:length": 0, "mpris:artUrl": ''
+        }
+        for tag in tags.keys():
+            try:
+                data_point = execute(f"playerctl metadata {tag}").stdout[:-1]
+                if tag == "mpris:length":
+                    data_point = int(data_point[:-6])
+                data.append(data_point)
+            except Exception as e:
+                print(e)
+                data.append(tags[tag])
+        data.insert(2, execute("playerctl position").stdout[:-1])
+        if data[2] != "":
+            data[2] = int(float(data[2])) # Convert position to int (seconds)
+        else:
+            data[2] = 0
+        return (data)
     
 
 if __name__ == "__main__":

@@ -7,8 +7,7 @@ from light_controller import *
 import time
 import subprocess
 
-# TODO: Get Phillips Hue Connected (May have to look into dual-network)
-# TODO: Finish Stream Deck Grid
+# TODO: Add Wakeup/Sleep Functionality.
 # TODO: Add Volume Display on M5 Core 2.
 # TODO: Ignore non spotify media
 
@@ -22,15 +21,15 @@ def m5_process():
             print(metadata)
             if current_title != metadata[0]:
                 # New song detected, update everything
-                print(execute(f"python send_cover.py jpeg {usb_out} {metadata[-1]}").stdout[:-1])
-                print(execute(f"python send_cover.py meta {usb_out} --title \"{metadata[0]}\" --artist \"{metadata[1]}\" --duration {metadata[3]}"))
-                print(execute(f"python send_cover.py pos {usb_out} --pos {metadata[2]}"))
+                execute(f"python send_cover.py jpeg {usb_out} {metadata[-1]}").stdout[:-1]
+                execute(f"python send_cover.py meta {usb_out} --title \"{metadata[0]}\" --artist \"{metadata[1]}\" --duration {metadata[3]}")
+                execute(f"python send_cover.py pos {usb_out} --pos {metadata[2]}")
                 current_title = metadata[0]
             else:
                 # Same song, update position only
-                print(execute(f"python send_cover.py pos {usb_out} --pos {metadata[2]}"))
+                execute(f"python send_cover.py pos {usb_out} --pos {metadata[2]}")
         
-        time.sleep(1)
+        time.sleep(0.25)
 
 def test():
     pass
