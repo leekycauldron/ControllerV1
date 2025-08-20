@@ -6,7 +6,7 @@ class MusicPlayer:
         pass
 
     def is_playing(self):
-        return execute("playerctl status").stdout == "Playing\n"
+        return execute("playerctl -p spotify status").stdout == "Playing\n"
 
     # Title, Artist, Position, Track Length, Album Cover
     def get_metadata(self):
@@ -16,14 +16,14 @@ class MusicPlayer:
         }
         for tag in tags.keys():
             try:
-                data_point = execute(f"playerctl metadata {tag}").stdout[:-1]
+                data_point = execute(f"playerctl -p spotify metadata {tag}").stdout[:-1]
                 if tag == "mpris:length":
                     data_point = int(data_point[:-6])
                 data.append(data_point)
             except Exception as e:
                 print(e)
                 data.append(tags[tag])
-        data.insert(2, execute("playerctl position").stdout[:-1])
+        data.insert(2, execute("playerctl -p spotify position").stdout[:-1])
         if data[2] != "":
             data[2] = int(float(data[2])) # Convert position to int (seconds)
         else:

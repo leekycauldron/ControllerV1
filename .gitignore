@@ -1,4 +1,6 @@
 /venv
-/__pycache__
-/daily-digest
-config_crontab.py
+.env
+__pycache__
+*.mp3
+*.txt
+!alarm.mp3
