@@ -13,11 +13,12 @@ import time
 
 STOP_FLAG   = "/home/bryson/code_projects/ControllerV1/daily-digest/stop.flag"    # presence/absence flag file
 RUNNING_FLAG = "/home/bryson/code_projects/ControllerV1/daily-digest/running.flag"  # indicates this program is active
+usb_out = "/dev/ttyACM0"
+
 
 def m5_process():
     mp = MusicPlayer()
     current_title = ""
-    usb_out = "/dev/ttyACM0"
     try:
         while True:
             if mp.is_playing():
@@ -77,6 +78,8 @@ def sd_process():
 
 def volume(query):
     execute(query)
+    volume = execute("amixer get Master", True)
+    execute(f"python send_cover.py vol {usb_out} --vol {volume}")
 
 def loop_mode(readonly=False):
     try:

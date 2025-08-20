@@ -78,6 +78,18 @@ def send_pos(port: str, position_sec: int, baud=921600):
         ser.write(header)
         ser.flush()
 
+def send_volume(port: str, volume_pct: int, baud=921600):
+    """
+    META(type=3): <4s B B>
+      magic="META", type=3, volume_pct (0..100)
+    """
+    v = max(0, min(100, int(volume_pct)))
+    header = struct.pack("<4sBB", b"META", 3, v)
+    with serial.Serial(port, baudrate=baud, timeout=5) as ser:
+        ser.write(header)
+        ser.flush()
+
+
 def main():
     p = argparse.ArgumentParser(description="Send album cover and/or metadata/progress over Serial")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -108,6 +120,12 @@ def main():
     sp_pos.add_argument("port")
     sp_pos.add_argument("--pos", required=True, type=int, help="Position in seconds")
 
+    # send volume %
+    sp_vol = sub.add_parser("vol", help="Send volume percentage (0-100)")
+    sp_vol.add_argument("port")
+    sp_vol.add_argument("--vol", required=True, type=int, help="Volume percent (0..100)")
+
+
     args = p.parse_args()
 
     if args.cmd == "jpeg":
@@ -122,6 +140,10 @@ def main():
     elif args.cmd == "pos":
         send_pos(args.port, args.pos)
         print("Sent position")
+    elif args.cmd == "vol":
+        send_volume(args.port, args.vol)
+        print("Sent volume")
+
 
 if __name__ == "__main__":
     main()

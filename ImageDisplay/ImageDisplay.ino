@@ -1,13 +1,29 @@
 #include <M5Unified.h>
+#include <memory>
 
-// Layout constants
+// ===================== Cover + Volume layout (struct FIRST) =====================
+struct CoverLayout {
+  int coverSide;
+  int coverX;
+  int coverY;
+  int volX;      // left x of the volume column
+  int volTop;    // top y of the bar box
+  int volBarH;   // drawable bar height (without number)
+  int overlayY0; // top of overlay
+};
+
+// ===================== Layout constants =====================
 static const int OVERLAY_H = 60;  // a bit taller to fit two rows cleanly
 static const int PAD = 6;
 static const int BAR_H = 12;
 static const int GAP = 4;         // small vertical gap between rows
 
+// Volume column geometry (to the right of the cover)
+static const int VOL_W   = 28;   // width of the volume column (bar area)
+static const int VOL_PAD = 4;    // inner padding inside the volume column
+static const int VOL_NUM_H = 14; // reserved height for the numeric label under the bar
 
-
+// ===================== Protocol structs =====================
 struct __attribute__((packed)) ImgHeader {
   char     magic[4];   // "IMG0"
   uint16_t width;
@@ -19,7 +35,8 @@ struct __attribute__((packed)) ImgHeader {
 // META packets share the same magic and vary by type.
 enum MetaType : uint8_t {
   META_FULL = 1,  // title/artist/duration
-  META_POS  = 2   // position only
+  META_POS  = 2,  // position only
+  META_VOL  = 3   // volume percent (0..100)
 };
 
 // META_FULL header (followed by title and artist UTF-8 bytes)
@@ -38,16 +55,25 @@ struct __attribute__((packed)) MetaPosHeader {
   uint32_t position;   // seconds
 };
 
+// Optional tiny header for volume (we parse inline, but kept for reference)
+struct __attribute__((packed)) MetaVolHeader {
+  char     magic[4];   // "META"
+  uint8_t  type;       // 3
+  uint8_t  volume;     // 0..100
+};
+
+// ===================== State =====================
 static String g_title = "";
 static String g_artist = "";
 static uint32_t g_duration = 0;  // sec
 static uint32_t g_position = 0;  // sec
+static uint8_t  g_volume  = 0;   // 0..100
 
-
-// Progress bar sprite to prevent flicker
+// Progress bar and volume sprites to prevent flicker
 M5Canvas barSpr(&M5.Display);
+M5Canvas volSpr(&M5.Display);
 
-// ---------- IO helpers ----------
+// ===================== IO helpers =====================
 bool readExact(uint8_t* dst, size_t n, uint32_t timeout_ms = 5000) {
   uint32_t start = millis();
   size_t got = 0;
@@ -66,7 +92,7 @@ bool readExact(uint8_t* dst, size_t n, uint32_t timeout_ms = 5000) {
 // Read 1 byte and discard (for resync)
 void dropOne() { if (Serial.available()) Serial.read(); }
 
-// ---------- UI helpers ----------
+// ===================== Text helpers =====================
 int textWidthWithFont(const String& s, const lgfx::IFont* font) {
   M5.Display.setFont(font);
   return M5.Display.textWidth(s);
@@ -92,6 +118,84 @@ static inline String mmss(uint32_t s) {
   return String(buf);
 }
 
+// ===================== Cover + Volume layout (functions) =====================
+static CoverLayout computeLayout() {
+  CoverLayout L{};
+  int sw = M5.Display.width();
+  int sh = M5.Display.height();
+  L.overlayY0 = sh - OVERLAY_H;
+
+  // Cover side is max square that fits vertically above overlay
+  L.coverSide = min(sw, L.overlayY0 - PAD*2);
+  if (L.coverSide < 40) L.coverSide = 40;
+
+  // Center the cover horizontally
+  L.coverX = (sw - L.coverSide) / 2;
+  L.coverY = PAD;
+
+  // Volume column pinned to the right edge
+  L.volX = sw - VOL_W - PAD;
+  L.volTop = PAD;
+
+  // Bar height fits above overlay
+  L.volBarH = L.overlayY0 - PAD - VOL_NUM_H - GAP - L.volTop;
+  if (L.volBarH < 20) L.volBarH = 20;
+
+  return L;
+}
+
+
+void initVolSpriteIfNeeded(const CoverLayout& L) {
+  if (volSpr.width() == VOL_W && volSpr.height() == L.volBarH) return;
+  volSpr.setColorDepth(16);
+  if (volSpr.width() || volSpr.height()) volSpr.deleteSprite();
+  volSpr.createSprite(VOL_W, L.volBarH);
+}
+
+void drawVolumeColumn() {
+  CoverLayout L = computeLayout();
+  initVolSpriteIfNeeded(L);
+
+  // Clear the whole volume column area (bar + number) to avoid ghosting
+  M5.Display.fillRect(L.volX, PAD, VOL_W, L.overlayY0 - PAD - PAD, TFT_BLACK);
+
+  // Draw the bar in a sprite
+  volSpr.fillRect(0, 0, VOL_W, L.volBarH, TFT_DARKGREY);
+  volSpr.drawRect(0, 0, VOL_W, L.volBarH, TFT_WHITE);
+
+  int innerW = VOL_W - VOL_PAD*2;
+  int innerH = L.volBarH - VOL_PAD*2;
+  if (innerW < 4) innerW = 4;
+  if (innerH < 4) innerH = 4;
+
+  // Volume fill from bottom up
+  float frac = max(0.0f, min(1.0f, g_volume / 100.0f));
+  int fillH = (int)(innerH * frac);
+  int fillY = VOL_PAD + (innerH - fillH);
+
+  if (fillH > 0) {
+    volSpr.fillRect(VOL_PAD, fillY, innerW, fillH, TFT_WHITE);
+  }
+
+  // Push sprite
+  volSpr.pushSprite(L.volX, L.volTop);
+
+  // Draw the numeric label centered under the bar, above overlay
+  String num = String((int)g_volume); // no '%' per request
+  const lgfx::IFont* metaFont = &fonts::Font2;
+  M5.Display.setFont(metaFont);
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.setTextDatum(textdatum_t::top_left);
+
+  int numY = L.overlayY0 - VOL_NUM_H; // reserved strip for number
+  int numW = M5.Display.textWidth(num);
+  int numX = L.volX + (VOL_W - numW) / 2;
+  if (numX < L.volX) numX = L.volX;
+
+  M5.Display.drawString(num, numX, numY);
+}
+
+// ===================== Overlay (title + progress) =====================
 void drawTextOverlayLine() {
   int sw = M5.Display.width();
   int sh = M5.Display.height();
@@ -103,6 +207,7 @@ void drawTextOverlayLine() {
   // Compose "Title · Artist"
   const lgfx::IFont* titleFont = &fonts::Font4;
   const lgfx::IFont* metaFont  = &fonts::Font2;
+  (void)metaFont; // reserved for future adjustments
 
   String title  = g_title.length()  ? g_title  : String("(No Title)");
   String artist = g_artist.length() ? g_artist : String("(Unknown Artist)");
@@ -112,14 +217,13 @@ void drawTextOverlayLine() {
   int usable = sw - PAD*2;
   line = ellipsizeToWidth(line, usable, titleFont);
 
-  // Draw the line centered-left in overlay top row
+  // Draw the line top-left in overlay (upper row)
   M5.Display.setTextDatum(textdatum_t::top_left);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.setFont(titleFont);
-  int textY = y0 + PAD;
-  M5.Display.drawString(line, PAD, textY);
+  int y0_text = y0 + PAD;
+  M5.Display.drawString(line, PAD, y0_text);
 }
-
 
 void initBarSpriteIfNeeded() {
   if (barSpr.width() > 0 && barSpr.height() > 0) return;
@@ -183,9 +287,11 @@ void drawProgressRow() {
 void redrawOverlay() {
   drawTextOverlayLine();
   drawProgressRow();
+  // Keep volume visible on overlay refreshes
+  drawVolumeColumn();
 }
 
-// ---------- Packet handlers ----------
+// ===================== Packet handlers =====================
 bool handleIMG0() {
   ImgHeader hdr;
   memcpy(hdr.magic, "IMG0", 4);
@@ -208,27 +314,17 @@ bool handleIMG0() {
     return false;
   }
 
-  // ----- Cover area (square) -----
-  int sw = M5.Display.width();
-  int sh = M5.Display.height();
+  // ----- Cover + Volume layout -----
+  CoverLayout L = computeLayout();
 
-  // Square viewport height = screen minus overlay, minus padding
-  int coverSide = min(sw, sh - OVERLAY_H) - PAD*2;
-  if (coverSide < 40) coverSide = 40; // safety
+  // Clear everything above overlay (cover + volume column region)
+  M5.Display.fillRect(0, 0, M5.Display.width(), L.overlayY0, BLACK);
 
-  int coverX = (sw - coverSide) / 2;
-  int coverY = PAD;
+  // Clip strictly to the cover square so nothing bleeds into volume column
+  M5.Display.setClipRect(L.coverX, L.coverY, L.coverSide, L.coverSide);
 
-  // Clear only the cover area
-  M5.Display.fillRect(0, 0, sw, sh - OVERLAY_H, BLACK);
-
-  // Clip to the square viewport so nothing bleeds
-  M5.Display.setClipRect(coverX, coverY, coverSide, coverSide);
-
-  // Center incoming image inside the square viewport (no scaling here;
-  // if sender provides larger image, it will be cropped by the clip rect)
-  int drawX = coverX + (coverSide - (int)hdr.width)  / 2;
-  int drawY = coverY + (coverSide - (int)hdr.height) / 2;
+  int drawX = L.coverX + (L.coverSide - (int)hdr.width)  / 2;
+  int drawY = L.coverY + (L.coverSide - (int)hdr.height) / 2;
 
   if (hdr.fmt == 1) {
     M5.Display.drawJpg(buf, hdr.length, drawX, drawY);
@@ -241,12 +337,36 @@ bool handleIMG0() {
 
   free(buf);
 
-  // Redraw overlay on top
+  // Draw volume column and overlay
+  drawVolumeColumn();
   redrawOverlay();
   return true;
 }
 
+bool handleMETA_full_streamFastPath(uint8_t already_type) {
+  (void)already_type; // we know it's META_FULL
+  uint16_t title_len, artist_len; uint32_t duration;
+  if (!readExact(reinterpret_cast<uint8_t*>(&title_len), 2)) return false;
+  if (!readExact(reinterpret_cast<uint8_t*>(&artist_len), 2)) return false;
+  if (!readExact(reinterpret_cast<uint8_t*>(&duration), 4)) return false;
 
+  if (title_len > 1024 || artist_len > 1024) return false;
+
+  std::unique_ptr<uint8_t[]> tbuf(new uint8_t[title_len]);
+  std::unique_ptr<uint8_t[]> abuf(new uint8_t[artist_len]);
+  if (!readExact(tbuf.get(), title_len)) return false;
+  if (!readExact(abuf.get(), artist_len)) return false;
+
+  g_title = String((const char*)tbuf.get(), title_len);
+  g_artist = String((const char*)abuf.get(), artist_len);
+  g_duration = duration;
+  if (g_position > g_duration) g_position = 0;
+
+  redrawOverlay();
+  return true;
+}
+
+// Legacy/alternate handler not used by loop anymore, kept for reference
 bool handleMETA_full() {
   MetaFullHeader mh;
   memcpy(mh.magic, "META", 4);
@@ -264,28 +384,35 @@ bool handleMETA_full() {
   g_artist = String((const char*)abuf.get(), mh.artist_len);
   g_duration = mh.duration;
 
-  // Reset position on new meta unless you want to keep previous
   if (g_position > g_duration) g_position = 0;
 
   redrawOverlay();
   return true;
 }
 
-bool handleMETA_pos() {
-  MetaPosHeader ph;
-  memcpy(ph.magic, "META", 4);
-  if (!readExact(reinterpret_cast<uint8_t*>(&ph.type), sizeof(ph) - 4)) return false;
-  if (ph.type != META_POS) return false;
-
-  g_position = ph.position;
-  if (g_position > g_duration && g_duration > 0) g_position = g_duration;
-
-  // Fast path: only update bar/times sprite area to avoid flicker
+bool handleMETA_pos_streamFastPath(uint8_t already_type) {
+  (void)already_type; // META_POS
+  uint32_t pos;
+  if (!readExact(reinterpret_cast<uint8_t*>(&pos), 4)) return false;
+  g_position = pos;
+  if (g_duration && g_position > g_duration) g_position = g_duration;
+  // Fast path UI update
   drawProgressRow();
   return true;
 }
 
-// ---------- Setup / Loop ----------
+bool handleMETA_vol_streamFastPath(uint8_t already_type) {
+  (void)already_type; // META_VOL
+  uint8_t vol;
+  if (!readExact(reinterpret_cast<uint8_t*>(&vol), 1)) return false;
+  if (vol > 100) vol = 100;
+  g_volume = vol;
+  // Fast path UI update
+  drawVolumeColumn();
+  return true;
+}
+
+// ===================== Setup / Loop =====================
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
@@ -297,6 +424,9 @@ void setup() {
   M5.Display.drawString("Waiting for image over Serial...", M5.Display.width()/2, M5.Display.height()/2);
 
   Serial.begin(921600);
+
+  // Optional: draw initial volume column (empty) so region is clean
+  drawVolumeColumn();
 }
 
 void loop() {
@@ -309,52 +439,29 @@ void loop() {
   if (memcmp(magic, "IMG0", 4) == 0) {
     // IMG0: process remaining header/payload
     handleIMG0();
+
   } else if (memcmp(magic, "META", 4) == 0) {
     // Peek next byte (type)
     uint8_t type;
     if (!readExact(&type, 1)) return;
 
     if (type == META_FULL) {
-      // We already consumed "META" + type, read the rest of MetaFullHeader then payloads
-      // Reconstruct by reading remaining fields of the header:
-      // We'll push back the 'type' into handler by setting stream position logically.
-      // Simpler: handler will assume "META" already read; here we pass through by manually reading rest:
-      // We need to read the rest of the MetaFullHeader and payloads inside handler, so we put the 'type' back?
-      // Since Serial has no un-read, we implement handler to expect that we've already read 'type'.
-      // But current handler expects to read from 'type' onwards; we already read type, so we must emulate:
-      // Easiest: call a small inline that continues reading from 'title_len' onwards.
-
-      // Continue as in handler:
-      uint16_t title_len, artist_len; uint32_t duration;
-      if (!readExact(reinterpret_cast<uint8_t*>(&title_len), 2)) return;
-      if (!readExact(reinterpret_cast<uint8_t*>(&artist_len), 2)) return;
-      if (!readExact(reinterpret_cast<uint8_t*>(&duration), 4)) return;
-
-      if (title_len > 1024 || artist_len > 1024) { return; }
-
-      std::unique_ptr<uint8_t[]> tbuf(new uint8_t[title_len]);
-      std::unique_ptr<uint8_t[]> abuf(new uint8_t[artist_len]);
-      if (!readExact(tbuf.get(), title_len)) return;
-      if (!readExact(abuf.get(), artist_len)) return;
-
-      g_title = String((const char*)tbuf.get(), title_len);
-      g_artist = String((const char*)abuf.get(), artist_len);
-      g_duration = duration;
-      if (g_position > g_duration) g_position = 0;
-
-      redrawOverlay();
+      // Continue reading rest of MetaFull header + payloads
+      if (!handleMETA_full_streamFastPath(type)) return;
 
     } else if (type == META_POS) {
       // Read remaining 4 bytes position
-      uint32_t pos;
-      if (!readExact(reinterpret_cast<uint8_t*>(&pos), 4)) return;
-      g_position = pos;
-      if (g_duration && g_position > g_duration) g_position = g_duration;
-      drawProgressRow();
+      if (!handleMETA_pos_streamFastPath(type)) return;
+
+    } else if (type == META_VOL) {
+      // Read remaining 1 byte volume
+      if (!handleMETA_vol_streamFastPath(type)) return;
+
     } else {
       // Unknown meta type -> resync (drop stream until next recognizable magic)
       // Do nothing; next loop will try to read next magic
     }
+
   } else {
     // Bad sync: drop one byte and try again
     dropOne();
