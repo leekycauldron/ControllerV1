@@ -5,15 +5,15 @@ import vlc
 from pathlib import Path
 
 # ---- Config ----
-ALARM_MP3   = "/home/bryson/code_projects/ControllerV1/daily-digest/alarm.mp3"    # change to absolute paths if you prefer
-PODCAST_MP3 = "/home/bryson/code_projects/ControllerV1/daily-digest/podcast.mp3"
-STOP_FLAG   = "/home/bryson/code_projects/ControllerV1/daily-digest/stop.flag"    # presence/absence flag file
-RUNNING_FLAG = "/home/bryson/code_projects/ControllerV1/daily-digest/running.flag"  # indicates this program is active
+ALARM_MP3   = Path("/home/bryson/code_projects/ControllerV1/daily-digest/alarm.mp3")    # change to absolute paths if you prefer
+PODCAST_MP3 = Path("/home/bryson/code_projects/ControllerV1/daily-digest/podcast.mp3")
+STOP_FLAG   = Path("/home/bryson/code_projects/ControllerV1/daily-digest/stop.flag")   # presence/absence flag file
+RUNNING_FLAG = Path("/home/bryson/code_projects/ControllerV1/daily-digest/running.flag")  # indicates this program is active
 POLL_SEC    = 0.1                  # how often we poll for the flag
 
 # Volume (0.0 - 1.0)
-ALARM_VOLUME   = 0.5  # example: 80%
-PODCAST_VOLUME = 0.4  # example: 50%
+ALARM_VOLUME   = 0.3  # example: 80%
+PODCAST_VOLUME = 0.2  # example: 50%
 
 def set_system_volume(volume: float):
     """Set system Master volume using amixer (0.0 - 1.0)."""

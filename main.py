@@ -7,12 +7,11 @@ from pathlib import Path
 from light_controller import *
 import time
 
-# TODO: Clean up for git
-# TODO: Add Volume Display on M5 Core 2.
+# TODO: Add Early Alarm dismissal -> Podcast.
 
 
-STOP_FLAG   = "/home/bryson/code_projects/ControllerV1/daily-digest/stop.flag"    # presence/absence flag file
-RUNNING_FLAG = "/home/bryson/code_projects/ControllerV1/daily-digest/running.flag"  # indicates this program is active
+STOP_FLAG   = Path("/home/bryson/code_projects/ControllerV1/daily-digest/stop.flag")    # presence/absence flag file
+RUNNING_FLAG = Path("/home/bryson/code_projects/ControllerV1/daily-digest/running.flag")  # indicates this program is active
 usb_out = "/dev/ttyACM0"
 
 

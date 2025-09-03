@@ -193,12 +193,13 @@ def get_task_time(script_name: str = SCRIPT_NAME) -> Tuple[int, int]:
     return get_scheduled_time(script_name)
 
 
-def change_task_time(when_dt: datetime, script_name: str = SCRIPT_NAME) -> Tuple[int, int]:
+def change_task_time(when_dt: datetime, script_name: str = SCRIPT_NAME, command_if_create: str = None) -> Tuple[int, int]:
     """
     Alias that updates the time using a datetime object (so you can do hour=7, minute=0).
     Returns (hour, minute) written.
     """
-    
+    if command_if_create:
+        set_scheduled_time(when_dt, script_name, create_if_missing=True, command_if_create=command_if_create)
     return set_scheduled_time(when_dt, script_name, create_if_missing=True, command_if_create=f"/usr/bin/python3 {script_name} >> /home/bryson/wakeup.log 2>&1")
 
 
@@ -212,6 +213,6 @@ if __name__ == "__main__":
         print(f"[INFO] {e}")
 
     # Set 10 minutes before desired wake up time.
-    new_h, new_m = change_task_time(datetime.now().replace(hour=6, minute=50, second=0, microsecond=0),
+    new_h, new_m = change_task_time(datetime.now().replace(hour=7, minute=20, second=0, microsecond=0),
                                      script_name="/home/bryson/code_projects/ControllerV1/daily-digest/entry_prep.py")
     print(f"Updated schedule for wakeup.py: {new_h:02d}:{new_m:02d}")

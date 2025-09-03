@@ -1,5 +1,5 @@
 from modules import get_weather, get_gcal, get_news, get_traffic, summarize, podcaster
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from config_crontab import *
 import pytz
 
@@ -47,19 +47,20 @@ if __name__ == "__main__":
         # Set Alarm to 10 minutes from now.
         new_time = datetime.now() + timedelta(minutes=10)
         new_time = new_time.replace(second=0, microsecond=0)
-
+        script_name="/home/bryson/code_projects/ControllerV1/daily-digest/entry_wakeup.py"
         new_h, new_m = change_task_time(
             new_time,
-            script_name="/home/bryson/code_projects/ControllerV1/daily-digest/entry_wakeup.py",
+            command_if_create=f"XDG_RUNTIME_DIR=/run/user/1000 /usr/bin/python3 {script_name} >> /home/bryson/wakeup.log 2>&1"
         )
 
         print(f"Updated schedule for wakeup.py: {new_h:02d}:{new_m:02d}")
     out_string = ""
-    out_string += "Current Time: "+datetime.now().strftime("%A %B %d %Y, %-I:%M%p")+"\n"
+    ten_minutes_from_now = datetime.now() + timedelta(minutes=10)
+    out_string += "Current Time: "+ten_minutes_from_now.strftime("%A %B %d %Y, %-I:%M%p")+"\n"
     out_string += "Weather: "+ str(get_weather.run())+"\n"
     calendars = get_gcal.run()
     out_string += "Calendars: "+ str(calendars)+"\n"
-    departure_time = get_departure_time(calendars.get('classes',[]))
+    departure_time = datetime.combine(datetime.today().date(), time(9, 0))
     out_string+="Time to GO Station: "+str(get_traffic.run(departure_time=departure_time))+"\n"
     out_string+="News: "+str(get_news.run())
     summary = summarize.run(out_string)

@@ -18,7 +18,7 @@ def run():
 
         cal = Calendar(r.text)
         now = datetime.now(LOCAL_TZ)
-        soon = now + timedelta(days=30)
+        soon = now + timedelta(days=1)
 
         events = []
         for e in cal.events:
